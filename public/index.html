@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mike's Cafe - Order</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: white; }
+        
+        .header { 
+            background: #ff6b35; 
+            color: white; 
+            padding: 20px; 
+            text-align: center;
+        }
+        .table-number { 
+            background: rgba(255,255,255,0.2); 
+            padding: 5px 10px; 
+            border-radius: 15px; 
+            margin-top: 10px;
+            display: inline-block;
+        }
+        
+        .tabs { 
+            display: flex; 
+            background: #f8f9fa; 
+            padding: 10px;
+        }
+        .tab { 
+            flex: 1; 
+            padding: 10px; 
+            border: none; 
+            background: transparent;
+        }
+        .tab.active { 
+            background: #ff6b35; 
+            color: white; 
+            border-radius: 5px;
+        }
+        
+        .menu-items { padding: 20px; }
+        .menu-item { 
+            background: white; 
+            padding: 15px; 
+            margin-bottom: 10px; 
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .add-to-cart { 
+            background: #28a745; 
+            color: white; 
+            border: none; 
+            padding: 8px 15px; 
+            border-radius: 5px; 
+            margin-top: 10px;
+        }
+        
+        .cart-bar { 
+            position: fixed; 
+            bottom: 0; 
+            left: 0; 
+            right: 0; 
+            background: #333; 
+            color: white; 
+            padding: 15px; 
+            display: flex; 
+            justify-content: space-between;
+        }
+        .place-order-btn { 
+            background: #ff6b35; 
+            color: white; 
+            border: none; 
+            padding: 10px 20px; 
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>Mike's Cafe</h1>
+            <div class="table-number" id="tableNumberDisplay">Table 15</div>
+        </header>
+
+        <!-- Category Tabs -->
+        <div class="tabs">
+            <button class="tab active" data-category="breakfast">Breakfast</button>
+            <button class="tab" data-category="lunch">Lunch</button>
+            <button class="tab" data-category="dinner">Dinner</button>
+            <button class="tab" data-category="drinks">Drinks</button>
+        </div>
+
+        <!-- Menu Items -->
+        <div class="menu-items" id="menuItems">
+            <!-- Menu will be loaded here by JavaScript -->
+        </div>
+
+        <!-- Cart -->
+        <div class="cart-bar">
+            <div class="cart-info">
+                <span id="cartCount">0 items</span> - 
+                R<span id="cartTotal">0.00</span>
+            </div>
+            <button class="place-order-btn" id="placeOrder">Place Order</button>
+        </div>
+    </div>
+
+    <script>
+        let cart = [];
+        let total = 0;
+        let currentCategory = 'breakfast';
+
+        // Get table number from URL
+        function getTableNumber() {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get('table') || '15'; // Default to table 15
+        }
+
+        // Update table number display
+        function updateTableDisplay() {
+            const tableNumber = getTableNumber();
+            document.getElementById('tableNumberDisplay').textContent = `Table ${tableNumber}`;
+        }
+
+        // Load menu from API
+        async function loadMenu(category) {
+            try {
+                const response = await fetch('/api/menu');
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayMenu(data.menu[category]);
+                    currentCategory = category;
+                    
+                    // Update active tab
+                    document.querySelectorAll('.tab').forEach(tab => {
+                        tab.classList.remove('active');
+                    });
+                    document.querySelector(`[data-category="${category}"]`).classList.add('active');
+                }
+            } catch (error) {
+                console.error('Error loading menu:', error);
+            }
+        }
+
+        // Display menu items
+        function displayMenu(menuItems) {
+            const menuContainer = document.getElementById('menuItems');
+            menuContainer.innerHTML = '';
+
+            menuItems.forEach(item => {
+                const menuItem = document.createElement('div');
+                menuItem.className = 'menu-item';
+                menuItem.innerHTML = `
+                    <h3>${item.name}</h3>
+                    <p>R${item.price.toFixed(2)}</p>
+                    <button class="add-to-cart" data-id="${item.id}" data-name="${item.name}" data-price="${item.price}">
+                        Add to Cart
+                    </button>
+                `;
+                menuContainer.appendChild(menuItem);
+            });
+
+            attachCartEvents();
+        }
+
+        // Attach cart events to buttons
+        function attachCartEvents() {
+            document.querySelectorAll('.add-to-cart').forEach(button => {
+                button.addEventListener('click', function() {
+                    const itemId = this.getAttribute('data-id');
+                    const itemName = this.getAttribute('data-name');
+                    const itemPrice = parseFloat(this.getAttribute('data-price'));
+                    
+                    addToCart(itemId, itemName, itemPrice);
+                });
+            });
+        }
+
+        // Add item to cart
+        function addToCart(id, name, price) {
+            cart.push({ id, name, price });
+            total += price;
+            
+            updateCartDisplay();
+            alert('Added ' + name + ' to cart!');
+        }
+
+        // Update cart display
+        function updateCartDisplay() {
+            document.getElementById('cartCount').textContent = cart.length + ' items';
+            document.getElementById('cartTotal').textContent = total.toFixed(2);
+        }
+
+        // Place order with payment
+        async function placeOrder() {
+            if (cart.length === 0) {
+                alert('Your cart is empty!');
+                return;
+            }
+
+            try {
+                const tableNumber = getTableNumber();
+                const orderData = {
+                    tableNumber: parseInt(tableNumber),
+                    items: cart,
+                    total: total
+                };
+
+                console.log('Placing order:', orderData);
+
+                // First, create the order
+                const orderResponse = await fetch('/api/order', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(orderData)
+                });
+
+                const orderResult = await orderResponse.json();
+                console.log('Order response:', orderResult);
+                
+                if (orderResult.success) {
+                    // Then initiate payment
+                    const paymentResponse = await fetch('/api/payment/create', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            orderId: orderResult.orderId,
+                            amount: total,
+                            tableNumber: parseInt(tableNumber),
+                            items: cart
+                        })
+                    });
+
+                    const paymentResult = await paymentResponse.json();
+                    console.log('Payment response:', paymentResult);
+                    
+                    if (paymentResult.success) {
+                        // Redirect to PayFast
+                        window.open(paymentResult.payment_url, '_blank');
+                        
+                        // Clear cart after successful order creation
+                        cart = [];
+                        total = 0;
+                        updateCartDisplay();
+                        
+                        alert('Order placed! Please complete payment in the new window.');
+                    } else {
+                        alert('Payment initiation failed. Please try again.');
+                    }
+                } else {
+                    alert('Order failed. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error placing order:', error);
+                alert('Error placing order. Please try again.');
+            }
+        }
+
+        // Event listeners for tabs
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                const category = this.getAttribute('data-category');
+                loadMenu(category);
+            });
+        });
+
+        // Event listener for place order
+        document.getElementById('placeOrder').addEventListener('click', placeOrder);
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            updateTableDisplay();
+            loadMenu('breakfast');
+        });
+    </script>
+</body>
+</html>

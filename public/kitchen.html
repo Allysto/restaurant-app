@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kitchen Display - Mike's Cafe</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #1a1a1a; color: white; }
+        
+        .header { 
+            background: #dc2626; 
+            padding: 20px; 
+            text-align: center;
+        }
+        
+        .orders-container {
+            padding: 20px;
+            display: grid;
+            gap: 15px;
+        }
+        
+        .order-card {
+            background: #2d2d2d;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #dc2626;
+        }
+        
+        .order-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        
+        .order-items {
+            margin: 10px 0;
+        }
+        
+        .order-item {
+            padding: 5px 0;
+            border-bottom: 1px solid #444;
+        }
+        
+        .order-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        .btn-preparing { background: #f59e0b; color: black; }
+        .btn-ready { background: #10b981; color: white; }
+        .btn-completed { background: #6b7280; color: white; }
+        
+        .status-new { border-left-color: #dc2626; }
+        .status-preparing { border-left-color: #f59e0b; }
+        .status-ready { border-left-color: #10b981; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🍳 Kitchen Display</h1>
+        <p>Mike's Cafe - Live Orders</p>
+    </div>
+    
+    <div class="orders-container" id="ordersContainer">
+        <!-- Orders will appear here automatically -->
+        <div class="order-card status-new">
+            <div class="order-header">
+                <h3>Table 15</h3>
+                <span>#ORD123</span>
+            </div>
+            <div class="order-time">12:05 PM</div>
+            <div class="order-items">
+                <div class="order-item">• Classic Breakfast</div>
+                <div class="order-item">• Coffee</div>
+            </div>
+            <div class="order-actions">
+                <button class="btn btn-preparing">Preparing</button>
+                <button class="btn btn-ready">Ready</button>
+                <button class="btn btn-completed">Completed</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+<script>
+    const socket = io();
+    const ordersContainer = document.getElementById('ordersContainer');
+
+    // Load orders when connected
+    socket.on('current_orders', (orders) => {
+        displayOrders(orders);
+    });
+
+    // Listen for new orders
+    socket.on('new_order', (order) => {
+        addNewOrder(order);
+    });
+
+    // Listen for order updates
+    socket.on('order_updated', (data) => {
+        updateOrderStatus(data.orderId, data.status);
+    });
+
+    // Display all orders
+    function displayOrders(orders) {
+        ordersContainer.innerHTML = '';
+        orders.forEach(order => {
+            addOrderToDisplay(order);
+        });
+    }
+
+    // Add new order to display
+    function addNewOrder(order) {
+        addOrderToDisplay(order);
+    }
+
+    // Add order to display
+  function addOrderToDisplay(order) {
+    const orderCard = document.createElement('div');
+    orderCard.className = `order-card status-${order.status}`;
+    orderCard.id = `order-${order.id}`;
+    
+    const paymentStatus = order.status === 'paid' ? '💰 PAID' : '⏳ PENDING';
+    
+    orderCard.innerHTML = `
+        <div class="order-header">
+            <h3>Table ${order.tableNumber}</h3>
+            <span>${order.id}</span>
+        </div>
+        <div class="order-time">${order.timestamp} - ${paymentStatus}</div>
+        <div class="order-items">
+            ${order.items.map(item => `
+                <div class="order-item">• ${item.name} - R${item.price.toFixed(2)}</div>
+            `).join('')}
+        </div>
+        <div class="order-total">Total: R${order.total.toFixed(2)}</div>
+        <div class="order-actions">
+            <button class="btn btn-preparing" onclick="updateStatus('${order.id}', 'preparing')">
+                Preparing
+            </button>
+            <button class="btn btn-ready" onclick="updateStatus('${order.id}', 'ready')">
+                Ready
+            </button>
+            <button class="btn btn-completed" onclick="updateStatus('${order.id}', 'completed')">
+                Completed
+            </button>
+        </div>
+    `;
+    
+    ordersContainer.appendChild(orderCard);
+}
+    // Update order status
+    function updateStatus(orderId, status) {
+        socket.emit('update_order_status', { orderId, status });
+    }
+
+    // Update order status visually
+    function updateOrderStatus(orderId, status) {
+        const orderElement = document.getElementById(`order-${orderId}`);
+        if (orderElement) {
+            orderElement.className = `order-card status-${status}`;
+        }
+    }
+
+    // Make functions global for HTML onclick
+    window.updateStatus = updateStatus;
+</script>
+</body>
+</html>
