@@ -3,7 +3,7 @@ const path = require('path');
 const http = require('http');
 const socketIo = require('socket.io');
 const { Pool } = require('pg');
-const { generatePaymentURL } = require('./payment');
+const { generatePaymentURL, generateDemoPaymentURL } = require('./payment');
 const { generateQRCode, generateAllQRCodes } = require('./qrcode');
 
 const app = express();
@@ -221,7 +221,14 @@ app.post('/api/payment/create', (req, res) => {
     tableNumber: tableNumber
   };
   
-  const paymentURL = generatePaymentURL(paymentData);
+  // Use demo payment for Render, or real PayFast if configured
+  let paymentURL;
+  if (process.env.NODE_ENV === 'production' && process.env.PAYFAST_MERCHANT_ID) {
+    paymentURL = generatePaymentURL(paymentData, req);
+  } else {
+    // Demo mode for Render free tier
+    paymentURL = generateDemoPaymentURL(paymentData, req);
+  }
   
   res.json({
     success: true,
@@ -288,8 +295,8 @@ app.get('/payment/cancel', (req, res) => {
   `);
 });
 
-// QR Code routes
-app.get('/api/qrcode/:tableNumber', (req, res) => {
+// QR Code routes - UPDATED for Render
+app.get('/api/qrcode/:tableNumber', async (req, res) => {
   const tableNumber = parseInt(req.params.tableNumber);
   
   if (isNaN(tableNumber) || tableNumber < 1) {
@@ -300,12 +307,12 @@ app.get('/api/qrcode/:tableNumber', (req, res) => {
   }
   
   try {
-    const qrPath = generateQRCode(tableNumber);
+    const qrData = await generateQRCode(tableNumber, req);
     res.json({
       success: true,
-      tableNumber: tableNumber,
-      qrCodeURL: qrPath,
-      orderURL: `http://localhost:3000?table=${tableNumber}`
+      tableNumber: qrData.tableNumber,
+      qrCode: qrData.qrCode, // base64 image
+      orderURL: qrData.url
     });
   } catch (error) {
     res.status(500).json({ 
@@ -315,10 +322,10 @@ app.get('/api/qrcode/:tableNumber', (req, res) => {
   }
 });
 
-app.get('/api/qrcodes/generate-all', (req, res) => {
+app.get('/api/qrcodes/generate-all', async (req, res) => {
   try {
     const tableCount = parseInt(req.query.tables) || 20;
-    const qrCodes = generateAllQRCodes(tableCount);
+    const qrCodes = await generateAllQRCodes(tableCount, req);
     
     res.json({
       success: true,
@@ -391,8 +398,11 @@ app.get('/qrcodes', (req, res) => {
 server.listen(PORT, () => {
   console.log(`🍕 Restaurant system LIVE on port ${PORT}`);
   console.log(`🌐 Access your system:`);
-  console.log(`   Customer: http://localhost:${PORT}`);
-  console.log(`   Kitchen: http://localhost:${PORT}/kitchen`);
-  console.log(`   Admin: http://localhost:${PORT}/admin`);
-  console.log(`   QR Codes: http://localhost:${PORT}/qrcodes`);
+  
+  const baseURL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+  console.log(`   Customer: ${baseURL}`);
+  console.log(`   Kitchen: ${baseURL}/kitchen`);
+  console.log(`   Admin: ${baseURL}/admin`);
+  console.log(`   QR Codes: ${baseURL}/qrcodes`);
+  console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
 });

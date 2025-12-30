@@ -1,38 +1,40 @@
-const qr = require('qr-image');
-const fs = require('fs');
-const path = require('path');
+const QRCode = require('qrcode');
 
-// Generate QR code for a specific table
-function generateQRCode(tableNumber) {
-    const qrData = `http://localhost:3000?table=${tableNumber}`;
-    const qrPNG = qr.image(qrData, { type: 'png' });
-    
-    const qrDir = path.join(__dirname, 'public', 'qrcodes');
-    
-    // Create qrcodes directory if it doesn't exist
-    if (!fs.existsSync(qrDir)) {
-        fs.mkdirSync(qrDir, { recursive: true });
+// Generate QR code for a specific table (base64 for Render)
+async function generateQRCode(tableNumber, req = null) {
+    try {
+        // Dynamic URL for production
+        let url;
+        if (req) {
+            // Use request to get dynamic URL
+            url = `${req.protocol}://${req.get('host')}?table=${tableNumber}`;
+        } else {
+            // Fallback for direct calls
+            url = `${process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000'}?table=${tableNumber}`;
+        }
+        
+        // Generate base64 QR code (no file system needed)
+        const qrCodeBase64 = await QRCode.toDataURL(url);
+        
+        return {
+            tableNumber: tableNumber,
+            qrCode: qrCodeBase64, // Base64 image data
+            url: url,
+            orderURL: url
+        };
+    } catch (error) {
+        console.error('QR generation error:', error);
+        throw error;
     }
-    
-    const filename = `table-${tableNumber}.png`;
-    const filepath = path.join(qrDir, filename);
-    
-    qrPNG.pipe(fs.createWriteStream(filepath));
-    
-    return `/qrcodes/${filename}`;
 }
 
 // Generate QR codes for multiple tables
-function generateAllQRCodes(tables = 20) {
+async function generateAllQRCodes(tables = 20, req = null) {
     const qrCodes = [];
     
     for (let i = 1; i <= tables; i++) {
-        const qrPath = generateQRCode(i);
-        qrCodes.push({
-            tableNumber: i,
-            qrCodeURL: qrPath,
-            orderURL: `http://localhost:3000?table=${i}`
-        });
+        const qrData = await generateQRCode(i, req);
+        qrCodes.push(qrData);
     }
     
     return qrCodes;

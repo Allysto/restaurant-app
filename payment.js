@@ -1,25 +1,34 @@
 const axios = require('axios');
 
 // PayFast test credentials (SANDBOX - no real money)
+// Use environment variables for production
 const PAYFAST_CONFIG = {
-  merchant_id: '10000100',    // Test merchant ID
-  merchant_key: '46f0cd694581a', // Test merchant key
-  return_url: 'http://localhost:3000/payment/success',
-  cancel_url: 'http://localhost:3000/payment/cancel',
-  notify_url: 'http://localhost:3000/payment/notify',
-  env: 'sandbox' // Change to 'production' when live
+  merchant_id: process.env.PAYFAST_MERCHANT_ID || '10000100',    // Test merchant ID
+  merchant_key: process.env.PAYFAST_MERCHANT_KEY || '46f0cd694581a', // Test merchant key
+  return_url: process.env.PAYFAST_RETURN_URL || 'http://localhost:3000/payment/success',
+  cancel_url: process.env.PAYFAST_CANCEL_URL || 'http://localhost:3000/payment/cancel',
+  notify_url: process.env.PAYFAST_NOTIFY_URL || 'http://localhost:3000/payment/notify',
+  env: process.env.PAYFAST_ENV || 'sandbox' // Change to 'production' when live
 };
 
 // Generate PayFast payment URL
-function generatePaymentURL(orderData) {
+function generatePaymentURL(orderData, req = null) {
   const { orderId, amount, itemName, tableNumber } = orderData;
+  
+  // Determine base URL dynamically
+  let baseURL = 'http://localhost:3000';
+  if (req) {
+    baseURL = `${req.protocol}://${req.get('host')}`;
+  } else if (process.env.RENDER_EXTERNAL_URL) {
+    baseURL = process.env.RENDER_EXTERNAL_URL;
+  }
   
   const data = {
     merchant_id: PAYFAST_CONFIG.merchant_id,
     merchant_key: PAYFAST_CONFIG.merchant_key,
-    return_url: PAYFAST_CONFIG.return_url,
-    cancel_url: PAYFAST_CONFIG.cancel_url,
-    notify_url: PAYFAST_CONFIG.notify_url,
+    return_url: `${baseURL}/payment/success`,
+    cancel_url: `${baseURL}/payment/cancel`,
+    notify_url: `${baseURL}/payment/notify`,
     m_payment_id: orderId,
     amount: amount.toFixed(2),
     item_name: `Table ${tableNumber} - ${itemName}`,
@@ -46,4 +55,24 @@ function verifyPayment(data) {
   return data.payment_status === 'COMPLETE';
 }
 
-module.exports = { generatePaymentURL, verifyPayment, PAYFAST_CONFIG };
+// Demo payment function for testing on Render
+function generateDemoPaymentURL(orderData, req = null) {
+  const { orderId, amount, itemName, tableNumber } = orderData;
+  
+  // For Render demo, create a simple success URL
+  let baseURL = 'http://localhost:3000';
+  if (req) {
+    baseURL = `${req.protocol}://${req.get('host')}`;
+  } else if (process.env.RENDER_EXTERNAL_URL) {
+    baseURL = process.env.RENDER_EXTERNAL_URL;
+  }
+  
+  return `${baseURL}/payment/success?m_payment_id=${orderId}&amount=${amount}&item_name=Table ${tableNumber} - ${itemName}`;
+}
+
+module.exports = { 
+  generatePaymentURL, 
+  verifyPayment, 
+  PAYFAST_CONFIG,
+  generateDemoPaymentURL 
+};
